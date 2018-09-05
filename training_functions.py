@@ -6,7 +6,7 @@ import copy
 from sklearn.cluster import KMeans
 
 
-# Training function
+# Training function (from my torch_DCEC implementation, kept for completeness)
 def train_model(model, dataloader, criteria, optimizers, schedulers, num_epochs, params):
 
     # Note the time
@@ -29,6 +29,7 @@ def train_model(model, dataloader, criteria, optimizers, schedulers, num_epochs,
 
     dl = dataloader
 
+    # Pretrain or load weights
     if pretrain:
         while True:
             pretrained_model = pretraining(model, copy.deepcopy(dl), criteria[0], optimizers[1], schedulers[1], pretrain_epochs, params)
@@ -46,6 +47,7 @@ def train_model(model, dataloader, criteria, optimizers, schedulers, num_epochs,
         except:
             print("Couldn't load pretrained weights")
 
+    # Initialise clusters
     utils.print_both(txt_file, '\nInitializing cluster centers based on K-means')
     kmeans(model, copy.deepcopy(dl), params)
 
@@ -55,6 +57,7 @@ def train_model(model, dataloader, criteria, optimizers, schedulers, num_epochs,
     best_model_wts = copy.deepcopy(model.state_dict())
     best_loss = 10000.0
 
+    # Initial target distribution
     utils.print_both(txt_file, '\nUpdating target distribution')
     output_distribution, labels, preds_prev = calculate_predictions(model, copy.deepcopy(dl), params)
     target_distribution = target(output_distribution)
@@ -97,6 +100,7 @@ def train_model(model, dataloader, criteria, optimizers, schedulers, num_epochs,
 
             inputs = inputs.to(device)
 
+            # Uptade target distribution, chack and print performance
             if (batch_num - 1) % update_interval == 0 and not (batch_num == 1 and epoch == 0):
                 utils.print_both(txt_file, '\nUpdating target distribution:')
                 output_distribution, labels, preds = calculate_predictions(model, dataloader, params)
@@ -129,6 +133,7 @@ def train_model(model, dataloader, criteria, optimizers, schedulers, num_epochs,
             # zero the parameter gradients
             optimizers[0].zero_grad()
 
+            # Calculate losses and backpropagate
             with torch.set_grad_enabled(True):
                 outputs, clusters, _ = model(inputs)
                 loss_rec = criteria[0](outputs, inputs)
@@ -168,6 +173,7 @@ def train_model(model, dataloader, criteria, optimizers, schedulers, num_epochs,
                     writer.add_scalar('/Loss_clustering', loss_accum_clust, niter)
             batch_num = batch_num + 1
 
+            # Print image to tensorboard
             if batch_num == len(dataloader) and (epoch+1) % 5:
                 inp = utils.tensor2img(inputs)
                 out = utils.tensor2img(outputs)
@@ -191,8 +197,8 @@ def train_model(model, dataloader, criteria, optimizers, schedulers, num_epochs,
                                                                                                             epoch_loss_rec,
                                                                                                             epoch_loss_clust))
 
-        # deep copy the
-        if epoch_loss < best_loss or epoch_loss > best_loss:
+        # If wanted to do some criterium in the future (for now useless)
+        if epoch_loss < best_loss or epoch_loss >= best_loss:
             best_loss = epoch_loss
             best_model_wts = copy.deepcopy(model.state_dict())
 
@@ -207,7 +213,7 @@ def train_model(model, dataloader, criteria, optimizers, schedulers, num_epochs,
     return model
 
 
-# Training function
+# Training function (proper semisupervised training)
 def train_semisupervised(model, dataloaders, criteria, optimizers, schedulers, num_epochs, params):
 
     # Note the time
@@ -236,6 +242,7 @@ def train_semisupervised(model, dataloaders, criteria, optimizers, schedulers, n
 
     dl = dataloader
 
+    # Pretrain or load weights
     if pretrain:
         while True:
             pretrained_model = pretraining(model, copy.deepcopy(dl), criteria[0], optimizers[1], schedulers[1], pretrain_epochs, params)
@@ -253,8 +260,8 @@ def train_semisupervised(model, dataloaders, criteria, optimizers, schedulers, n
         except:
             print("Couldn't load pretrained weights")
 
+    # Initialise clusters
     utils.print_both(txt_file, '\nInitializing cluster centers based on average')
-    # kmeans(model, copy.deepcopy(dl), params)
     average_labelled_dist(model, copy.deepcopy(dataloader_labelled), params)
 
     utils.print_both(txt_file, '\nBegin clusters training')
@@ -263,6 +270,7 @@ def train_semisupervised(model, dataloaders, criteria, optimizers, schedulers, n
     best_model_wts = copy.deepcopy(model.state_dict())
     best_loss = 10000.0
 
+    # Initial target distribution
     utils.print_both(txt_file, '\nUpdating target distribution')
     output_distribution, labels, preds_prev = calculate_predictions(model, copy.deepcopy(dl), params)
     target_distribution = target(output_distribution)
@@ -307,6 +315,7 @@ def train_semisupervised(model, dataloaders, criteria, optimizers, schedulers, n
 
             inputs = inputs.to(device)
 
+            # Uptade target distribution, chack and print performance
             if (batch_num - 1) % update_interval == 0 and not (batch_num == 1 and epoch == 0):
                 utils.print_both(txt_file, '\nUpdating target distribution:')
                 output_distribution, labels, preds = calculate_predictions(model, dataloader, params)
@@ -338,18 +347,15 @@ def train_semisupervised(model, dataloaders, criteria, optimizers, schedulers, n
 
             loss_labelled = 0
 
-                # print(loss_labelled)
-                # output_dist, labels, preds = calculate_predictions(model, dataloader_labelled, params)
-                # print(output_dist.shape)
-                # print(criteria[2](preds, labels))
-
             # zero the parameter gradients
             optimizers[0].zero_grad()
 
+            # Calculate losses and backpropagate
             with torch.set_grad_enabled(True):
                 if (batch_num - 1) % label_upd_interval == 0 and not (batch_num == 1 and epoch == 0):
                     # utils.print_both(txt_file, '\nUpdating labelled loss:')
                     size = 0
+                    # Iterate through labelled part of the set
                     for d in dataloader_labelled:
                         inp, lab = d
                         inp = inp.to(params['device'])
@@ -362,9 +368,7 @@ def train_semisupervised(model, dataloaders, criteria, optimizers, schedulers, n
                 outputs, clusters, _ = model(inputs)
                 loss_rec = criteria[0](outputs, inputs)
                 loss_clust = gamma *criteria[1](torch.log(clusters), tar_dist) / batch
-                # print(loss_labelled)
                 loss = loss_rec + loss_clust + loss_labelled
-                # print(loss)
                 loss.backward()
                 optimizers[0].step()
 
@@ -406,6 +410,7 @@ def train_semisupervised(model, dataloaders, criteria, optimizers, schedulers, n
                     writer.add_scalar('/Loss_labels', loss_accum_labels, niter)
             batch_num = batch_num + 1
 
+            # Print image to tensorboard
             if batch_num == len(dataloader) and (epoch+1) % 5:
                 inp = utils.tensor2img(inputs)
                 out = utils.tensor2img(outputs)
@@ -432,8 +437,8 @@ def train_semisupervised(model, dataloaders, criteria, optimizers, schedulers, n
             epoch_loss_rec,
             epoch_loss_clust, epoch_loss_labels))
 
-        # deep copy the
-        if epoch_loss < best_loss or epoch_loss > best_loss:
+        # If wanted to do some criterium in the future (for now useless)
+        if epoch_loss < best_loss or epoch_loss >= best_loss:
             best_loss = epoch_loss
             best_model_wts = copy.deepcopy(model.state_dict())
 
@@ -448,6 +453,7 @@ def train_semisupervised(model, dataloaders, criteria, optimizers, schedulers, n
     return model
 
 
+# Pretraining function for recovery loss only
 def pretraining(model, dataloader, criterion, optimizer, scheduler, num_epochs, params):
     # Note the time
     since = time.time()
@@ -464,7 +470,6 @@ def pretraining(model, dataloader, criterion, optimizer, scheduler, num_epochs, 
 
     # Prep variables for weights and accuracy of the best model
     best_model_wts = copy.deepcopy(model.state_dict())
-    # best_acc = 0.0
     best_loss = 10000.0
 
     # Go through all epochs
@@ -533,8 +538,8 @@ def pretraining(model, dataloader, criterion, optimizer, scheduler, num_epochs, 
 
         utils.print_both(txt_file, 'Pretraining:\t Loss: {:.4f}'.format(epoch_loss))
 
-        # deep copy the
-        if epoch_loss < best_loss or epoch_loss > best_loss:
+        # If wanted to add some criterium in the future
+        if epoch_loss < best_loss or epoch_loss >= best_loss:
             best_loss = epoch_loss
             best_model_wts = copy.deepcopy(model.state_dict())
 
@@ -552,10 +557,12 @@ def pretraining(model, dataloader, criterion, optimizer, scheduler, num_epochs, 
     return model
 
 
+# K-means clusters initialisation
 def kmeans(model, dataloader, params):
     km = KMeans(n_clusters=model.num_clusters, n_init=20)
     output_array = None
     model.eval()
+    # Itarate throught the data and concatenate the latent space representations of images
     for data in dataloader:
         inputs, _ = data
         inputs = inputs.to(params['device'])
@@ -567,39 +574,19 @@ def kmeans(model, dataloader, params):
         # print(output_array.shape)
         if output_array.shape[0] > 50000: break
 
+    # Perform K-means
     km.fit_predict(output_array)
+    # Update clustering layer weights
     weights = torch.from_numpy(km.cluster_centers_)
     model.clustering.set_weight(weights.to(params['device']))
     # torch.cuda.empty_cache()
-
-
-def kmeans_relabel(model, dataloader, params):
-    km = KMeans(n_clusters=model.num_clusters, n_init=20)
-    output_array = None
-    model.eval()
-    for data in dataloader:
-        inputs, _ = data
-        inputs = inputs.to(params['device'])
-        _, _, outputs = model(inputs)
-        if output_array is not None:
-            output_array = np.concatenate((output_array, outputs.cpu().detach().numpy()), 0)
-        else:
-            output_array = outputs.cpu().detach().numpy()
-        # print(output_array.shape)
-        if output_array.shape[0] > 1: break
-
-    km.fit_predict(output_array)
-    weights = torch.from_numpy(km.cluster_centers_)
-    model.clustering.set_weight(weights.to(params['device']))
-    # torch.cuda.empty_cache()
-
 
 
 def average_labelled_dist(model, dataloader, params):
-    # km = KMeans(n_clusters=model.num_clusters, n_init=20)
     output_array = None
     label_array = None
     model.eval()
+    # Itarate throught the data and concatenate the latent space representations of images
     for data in dataloader:
         inputs, labels = data
         inputs = inputs.to(params['device'])
@@ -610,43 +597,31 @@ def average_labelled_dist(model, dataloader, params):
         else:
             output_array = outputs.cpu().detach().numpy()
             label_array = labels.cpu().detach().numpy()
-        if output_array.shape[0] >= 200: break
-    print(output_array.shape[0])
+
+    # Initialise weights
     weights = np.zeros((model.num_clusters, model.num_clusters))
     num_probes = np.zeros((model.num_clusters, 1))
 
+    # Iterate though latent space descriptors and sum labels for each cluster (keep number of elements in clusters)
     for j, row in enumerate(output_array):
-        # print(row)
         label = label_array[j]
         weights[label,:] += row
         num_probes[label] += 1
 
+    # Divide by the number of elements to get average
     for i in range(0, weights.shape[0]):
         weights[i, :] /= num_probes[i]
 
     print(num_probes)
-    # print(output_array.shape)
-    # print(weights)
 
-    # for i in range(0, model.num_clusters):
-    #     print(weights)
-    #     num_probes = 0
-    #     for j, row in enumerate(output_array):
-    #         if label_array[j] == i:
-    #             weights[]
-    #             num_probes += 1
-
-
-        # print(output_array.shape)
-        # if output_array.shape[0] > 50000: break
-
-    # km.fit_predict(output_array)
+    # Update weights in network
     weights = weights.astype(np.float32)
     weights = torch.from_numpy(weights)
     model.clustering.set_weight(weights.to(params['device']))
     # torch.cuda.empty_cache()
 
 
+# Function forwarding data through network, collecting clustering weight output and returning prediciotns and labels
 def calculate_predictions(model, dataloader, params):
     output_array = None
     label_array = None
@@ -668,6 +643,7 @@ def calculate_predictions(model, dataloader, params):
     return output_array, label_array, preds
 
 
+# Calculate target distribution
 def target(out_distr):
     tar_dist = out_distr ** 2 / np.sum(out_distr, axis=0)
     tar_dist = np.transpose(np.transpose(tar_dist) / np.sum(tar_dist, axis=1))

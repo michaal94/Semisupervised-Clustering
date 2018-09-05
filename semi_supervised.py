@@ -16,6 +16,7 @@ if __name__ == "__main__":
     import training_functions
     from tensorboardX import SummaryWriter
 
+    # Translate string entries to bool for parser
     def str2bool(v):
         if v.lower() in ('yes', 'true', 't', 'y', '1'):
             return True
@@ -67,6 +68,7 @@ if __name__ == "__main__":
 
     board = args.tensorboard
 
+    # Deal with pretraining option and way of showing network path
     pretrain = args.pretrain
     net_is_path = True
     if not pretrain:
@@ -79,12 +81,13 @@ if __name__ == "__main__":
     params = {'pretrain': pretrain}
 
     # Directories
+    # Create directories structure
     dirs = ['runs', 'reports', 'nets']
     list(map(lambda x: os.makedirs(x, exist_ok=True), dirs))
 
     # Net architecture
     model_name = args.net_architecture
-    # Indexing
+    # Indexing (for automated reports saving) - allows to run many trainings and get all the reports collected
     if pretrain or (not pretrain and net_is_path):
         reports_list = sorted(os.listdir('reports'), reverse=True)
         if reports_list:
@@ -110,6 +113,7 @@ if __name__ == "__main__":
 
     print(name_txt)
 
+    # Arrange filenames for report, network weights, pretrained network weights
     name_txt = os.path.join('reports', name_txt)
     name_net = os.path.join('nets', name_net)
     if net_is_path and not pretrain:
@@ -129,7 +133,7 @@ if __name__ == "__main__":
         f = open(name_txt, 'a')
     params['txt_file'] = f
 
-    # Delete tensorboard entry if exist (not to overlap)
+    # Delete tensorboard entry if exist (not to overlap as the charts become unreadable)
     try:
         os.system("rm -rf runs/" + name)
     except:
@@ -249,6 +253,8 @@ if __name__ == "__main__":
 
     # Data preparation
     if dataset == 'MNIST-train':
+        # Uses slightly modified torchvision MNIST class and creates dataloader with whole sets
+        # and sets of 2% of data (as labelled)
         import mnist
         tmp = "\nData preparation\nReading data from: MNIST train dataset"
         utils.print_both(f, tmp)
@@ -324,14 +330,6 @@ if __name__ == "__main__":
         tmp = "Image size used:\t{0}x{1}".format(img_size[0], img_size[1])
         utils.print_both(f, tmp)
 
-        import mnist3
-
-        dataset = mnist3.MNIST('../data', test=False, download=True,
-                              transform=transforms.Compose([
-                                  transforms.ToTensor(),
-                                  # transforms.Normalize((0.1307,), (0.3081,))
-                              ]))
-
         dataset = mnist.MNIST('../data', full=True, download=True,
                                transform=transforms.Compose([
                                    transforms.ToTensor(),
@@ -359,6 +357,8 @@ if __name__ == "__main__":
         utils.print_both(f, tmp)
 
     else:
+        # Custom dataset - arrange folders acording to README
+
         # Data folder
         data_dir = args.dataset_path
         tmp = "\nData preparation\nReading data from:\t./" + data_dir
@@ -408,8 +408,7 @@ if __name__ == "__main__":
     utils.print_both(f, tmp + '\n')
     params['device'] = device
 
-    # print(params)
-
+    # Evaluate the proper model
     to_eval = "nets." + model_name + "(img_size, num_clusters=num_clusters, leaky = args.leaky, neg_slope = args.neg_slope)"
     model = eval(to_eval)
 
@@ -418,8 +417,11 @@ if __name__ == "__main__":
     #     writer.add_graph(model, torch.autograd.Variable(torch.Tensor(batch, img_size[2], img_size[0], img_size[1])))
 
     model = model.to(device)
+    # Reconstruction loss
     criterion_1 = nn.MSELoss(size_average=True)
+    # Clustering loss
     criterion_2 = nn.KLDivLoss(size_average=False)
+    # Labelled loss
     criterion_3 = nn.CrossEntropyLoss(size_average=False)
 
     criteria = [criterion_1, criterion_2, criterion_3]
@@ -435,15 +437,16 @@ if __name__ == "__main__":
 
     schedulers = [scheduler, scheduler_pretrain]
 
-    print([dataloader, dataloader_labelled])
-
     if args.mode == 'train_full':
         model = training_functions.train_semisupervised(model, [dataloader, dataloader_labelled], criteria, optimizers, schedulers, epochs, params)
     elif args.mode == 'pretrain':
         model = training_functions.pretraining(model, [dataloader, dataloader_labelled], criteria, optimizers, schedulers, epochs, params)
 
+    # Save final model
     torch.save(model.state_dict(), name_net + '.pt')
 
+    # Close files
     f.close()
-    writer.close()
+    if board:
+        writer.close()
 
