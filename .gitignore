@@ -109,6 +109,8 @@ venv.bak/
 *.JPG
 *.jpeg
 *.JPEG
+!MNIST_plain.jpg
+!MNIST_trained.jpg
 
 # nets
 *.pt
