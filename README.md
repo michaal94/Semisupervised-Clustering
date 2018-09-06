@@ -132,7 +132,8 @@ MNIST-full | 95.13 | 98.22%
 MNIST-test | 89.59 | 95.29% 
 
 In addition, the _t-SNE_ plots of plain and clustered MNIST full dataset are shown:
-
+![asd](/MNIST_results/MNIST_plain.jpg)
+![asd](/MNIST_results/MNIST_trained.jpg)
 
 
 
