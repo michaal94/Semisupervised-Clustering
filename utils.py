@@ -9,6 +9,7 @@ def tensor2img(tensor):
     std = np.array([0.229, 0.224, 0.225])
     img = std * img + mean
     img = np.clip(img, 0, 1)
+	img = img.transpose((2, 0, 1))
     return img
 
 

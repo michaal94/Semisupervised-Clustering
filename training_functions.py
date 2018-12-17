@@ -178,7 +178,7 @@ def train_model(model, dataloader, criteria, optimizers, schedulers, num_epochs,
                 inp = utils.tensor2img(inputs)
                 out = utils.tensor2img(outputs)
                 if board:
-                    img = np.concatenate((inp, out), axis=1)
+                    img = np.concatenate((inp, out), axis=2)
                     writer.add_image('Clustering/Epoch_' + str(epoch + 1).zfill(3) + '/Sample_' + str(img_counter).zfill(2), img)
                     img_counter += 1
 
@@ -415,7 +415,7 @@ def train_semisupervised(model, dataloaders, criteria, optimizers, schedulers, n
                 inp = utils.tensor2img(inputs)
                 out = utils.tensor2img(outputs)
                 if board:
-                    img = np.concatenate((inp, out), axis=1)
+                    img = np.concatenate((inp, out), axis=2)
                     writer.add_image('Clustering/Epoch_' + str(epoch + 1).zfill(3) + '/Sample_' + str(img_counter).zfill(2), img)
                     img_counter += 1
 
@@ -523,7 +523,7 @@ def pretraining(model, dataloader, criterion, optimizer, scheduler, num_epochs, 
                 inp = utils.tensor2img(inputs)
                 out = utils.tensor2img(outputs)
                 if board:
-                    img = np.concatenate((inp, out), axis=1)
+                    img = np.concatenate((inp, out), axis=2)
                     writer.add_image('Pretraining/Epoch_' + str(epoch + 1).zfill(3) + '/Sample_' + str(img_counter).zfill(2), img)
                     img_counter += 1
 
